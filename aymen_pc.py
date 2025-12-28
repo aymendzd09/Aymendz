@@ -1,133 +1,113 @@
 import os
 from flask import Flask, render_template_string, request, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = "aymen_dz_strong_99"
+app.secret_key = 'aymen_strong_key'
 
-# إعداد قاعدة البيانات للحفظ الدائم
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///castle.db'
+# إعداد قاعدة البيانات
+basedir = os.path.abspath(os.path.dirname(__file__))
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'castle.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 db = SQLAlchemy(app)
 
-# تعريف جدول المنشورات
+# موديل المنشورات
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.Text, nullable=False)
-    date_posted = db.Column(db.DateTime, default=datetime.utcnow)
 
 with app.app_context():
     db.create_all()
 
-# --- واجهة الهاتف (HTML) ---
-HTML_LAYOUT = """
+# تصميم الصفحة الرئيسية
+INDEX_HTML = '''
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>قلعة أيمن</title>
+    <title>🏰 قلعة أيمن</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f0f0f; color: #e0e0e0; padding: 15px; margin: 0; }
+        body { background: #0f0f0f; color: #e0e0e0; font-family: 'Segoe UI', Tahoma; padding: 20px; }
         .container { max-width: 600px; margin: auto; }
-        h1 { text-align: center; color: #007bff; text-shadow: 2px 2px 5px rgba(0,0,0,0.5); }
-        .post { background: #1a1a1a; padding: 15px; border-radius: 12px; margin-bottom: 20px; border-right: 6px solid #007bff; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
-        .post p { line-height: 1.6; font-size: 1.1em; margin: 0 0 10px 0; }
-        .date { font-size: 0.75em; color: #777; border-top: 1px solid #333; pt: 5px; }
-        .admin-link { text-align: center; margin-top: 30px; font-size: 0.8em; }
-        .admin-link a { color: #444; text-decoration: none; }
+        h1 { color: #bb86fc; text-shadow: 2px 2px #000; border-bottom: 2px solid #bb86fc; padding-bottom: 10px; }
+        .post { background: #1e1e1e; padding: 20px; margin: 20px 0; border-radius: 15px; border-left: 5px solid #03dac6; box-shadow: 0 5px 15px rgba(0,0,0,0.3); font-size: 1.2rem; }
+        .footer { margin-top: 50px; font-size: 0.8rem; color: #666; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🏰 قلعة أيمن</h1>
         {% for post in posts %}
-        <div class="post">
-            <p>{{ post.content }}</p>
-            <div class="date">نُشر في: {{ post.date_posted.strftime('%Y-%m-%d %H:%M') }}</div>
-        </div>
+            <div class="post">{{ post.content }}</div>
         {% else %}
-        <p style="text-align:center; color:#555;">لا توجد منشورات حالياً في القلعة.</p>
+            <p>لا توجد منشورات حالياً في القلعة...</p>
         {% endfor %}
-        <div class="admin-link"><a href="/admin">لوحة التحكم</a></div>
+        <div class="footer">حقوق الملكية محفوظة لأيمن © 2025</div>
     </div>
 </body>
 </html>
-"""
+'''
 
-ADMIN_LAYOUT = """
+# تصميم لوحة التحكم
+ADMIN_HTML = '''
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لوحة التحكم</title>
     <style>
-        body { background: #121212; color: white; font-family: sans-serif; padding: 20px; }
-        textarea { width: 100%; height: 120px; border-radius: 8px; background: #222; color: white; padding: 10px; border: 1px solid #444; }
-        button { width: 100%; padding: 12px; background: #28a745; border: none; color: white; border-radius: 8px; margin-top: 10px; cursor: pointer; }
-        .post-item { background: #1e1e1e; padding: 10px; margin-top: 10px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
-        .del-btn { color: #ff4444; text-decoration: none; font-weight: bold; padding: 5px 10px; border: 1px solid #ff4444; border-radius: 5px; }
+        body { background: #121212; color: white; text-align: center; font-family: Arial; }
+        .box { background: #1e1e1e; padding: 30px; border-radius: 10px; display: inline-block; margin-top: 50px; }
+        textarea { width: 90%; height: 100px; border-radius: 5px; padding: 10px; }
+        .btn { padding: 10px 20px; background: #bb86fc; border: none; border-radius: 5px; cursor: pointer; color: black; font-weight: bold; }
+        .delete-btn { color: #cf6679; text-decoration: none; margin-right: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h2>إدارة القلعة</h2>
-    <form action="/add_post" method="post">
-        <textarea name="content" placeholder="ماذا تريد أن تنشر يا أيمن؟" required></textarea>
-        <button type="submit">نشر الآن</button>
-    </form>
-    <hr>
-    <h3>المنشورات الحالية:</h3>
-    {% for post in posts %}
-    <div class="post-item">
-        <span>{{ post.content[:30] }}...</span>
-        <a href="/delete/{{ post.id }}" class="del-btn" onclick="return confirm('هل أنت متأكد من حذف المنشور؟')">حذف [X]</a>
+    <div class="box">
+        {% if not logged_in %}
+            <h2>أدخل كود القلعة</h2>
+            <form method="post">
+                <input type="password" name="code" placeholder="الرمز السري">
+                <button type="submit" class="btn">دخول</button>
+            </form>
+        {% else %}
+            <h2>مرحباً أيمن! 🛡️</h2>
+            <form method="post">
+                <textarea name="content" placeholder="ماذا تريد أن تنشر في قلعتك؟"></textarea><br><br>
+                <button type="submit" class="btn">نشر الآن</button>
+            </form>
+            <hr>
+            <h3>إدارة المنشورات:</h3>
+            {% for post in posts %}
+                <p>{{ post.content[:30] }}... <a href="/delete/{{ post.id }}" class="delete-btn">[حذف]</a></p>
+            {% endfor %}
+            <br><a href="/" style="color: #03dac6;">معاينة القلعة</a>
+        {% endif %}
     </div>
-    {% endfor %}
-    <br><a href="/" style="color:#007bff; text-decoration:none;">العودة للموقع</a>
 </body>
 </html>
-"""
-
-# --- المسارات (Routes) ---
+'''
 
 @app.route('/')
 def index():
-    posts = Post.query.order_by(Post.date_posted.desc()).all()
-    return render_template_string(HTML_LAYOUT, posts=posts)
+    posts = Post.query.order_by(Post.id.desc()).all()
+    return render_template_string(INDEX_HTML, posts=posts)
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
     if request.method == 'POST':
-        if request.form.get('password') == '19541962': # كلمة السر تاعك
-            session['admin'] = True
-            return redirect(url_for('admin'))
-        else:
-            return "كلمة سر خاطئة!"
-    
-    if not session.get('admin'):
-        return '''
-        <body style="background:#121212; color:white; text-align:center; padding-top:100px; font-family:sans-serif;">
-            <form method="post">
-                <h3>أدخل كود القلعة للعبور</h3>
-                <input type="password" name="password" style="padding:10px; border-radius:5px;"><br><br>
-                <button type="submit" style="padding:10px 20px; background:#007bff; color:white; border:none; border-radius:5px;">دخول</button>
-            </form>
-        </body>
-        '''
-    
-    posts = Post.query.order_by(Post.date_posted.desc()).all()
-    return render_template_string(ADMIN_LAYOUT, posts=posts)
-
-@app.route('/add_post', methods=['POST'])
-def add_post():
-    if session.get('admin'):
-        content = request.form.get('content')
-        if content:
-            new_post = Post(content=content)
+        if 'code' in request.form:
+            if request.form.get('code') == '19541962':
+                session['admin'] = True
+        elif session.get('admin'):
+            new_post = Post(content=request.form.get('content'))
             db.session.add(new_post)
             db.session.commit()
-    return redirect(url_for('admin'))
+            return redirect(url_for('admin'))
+    
+    posts = Post.query.order_by(Post.id.desc()).all()
+    return render_template_string(ADMIN_HTML, logged_in=session.get('admin'), posts=posts)
 
 @app.route('/delete/<int:id>')
 def delete(id):
